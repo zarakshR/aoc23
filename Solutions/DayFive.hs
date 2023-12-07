@@ -3,12 +3,13 @@
 module Solutions.DayFive (input, partOne, partTwo) where
 
 import           Text.Parsec
-import           Text.Parsec.String
+import           Text.Parsec.String (Parser)
 
-import Data.List
+import           Data.List
+import           Data.Maybe
 
-import Debug.Trace
-import System.IO.Unsafe
+import           Debug.Trace
+import           System.IO.Unsafe
 
 input :: String
 input = "test_data"
@@ -67,12 +68,12 @@ mappingP label
         build :: [Range] -> [Range]
         build = extendFromZero . fillGaps . sortRange
 
-        extendFromZero :: [Range] -> [Range]
-        extendFromZero (r:rs)
-            = let (Range (start,_) _) = r
-              in if start == 0
-                   then r : rs
-                   else (Range (0,start-1) (0,start-1)) : r : rs
+extendFromZero :: [Range] -> [Range]
+extendFromZero (r:rs)
+    = let (Range (start,_) _) = r
+      in if start == 0
+           then r : rs
+           else (Range (0,start-1) (0,start-1)) : r : rs
 
 fillGaps :: [Range] -> [Range]
 fillGaps [] = []
@@ -89,37 +90,47 @@ sortRange = sortBy (\(Range (x,y) (p,q)) (Range (x',y') (_,_)) -> compare x x')
 
 tracer x = trace (show x) x
 
-mergeRange :: [Range] -> [Range] -> [Range]
-mergeRange [] range2 = range2
-mergeRange range1 [] = range1
-mergeRange r1@((Range (x,y) (x',y')): rest1) r2@((Range (a,b) (a',b')): rest2)
-    = trace (
-        "\n" ++ show r1 ++ "\n" ++ show r2 ++ "\n"
-    )
-    $ if (y > b)
-        then (Range (x,x+b-a) (a',b')) : mergeRange (Range (x+b-a+1,y) (y'-x+b-a+1,y') : rest1) rest2
-        else (Range (x,y) (a',a'+y-x)) : mergeRange rest1 (Range (a+y-x+1,b) (a'+y-x+1,b'):  rest2)
+merge :: [Range] -> [Range] -> [Range]
+merge ranges1 ranges2 = concatMap (mergeIntoRanges ranges2) ranges1
 
+mergeIntoRanges :: [Range] -> Range -> [Range]
+mergeIntoRanges ranges range = concatMap (intersect' range) $ ranges
 
-__printAlmanac :: Either ParseError Almanac -> ()
-__printAlmanac (Right Almanac {..})
-    = let seedsoil = seedSoil
-          soilfert = soilFertilizer
-          fertwater = fertilizerWater
-          merged = fillGaps . sortRange . mergeRange seedsoil $ soilfert
-          merged2 = mergeRange merged fertwater
-      in unsafePerformIO (print merged2)
-         -- unsafePerformIO (print seeds
-         --                  >> print seedSoil
-         --                  >> print soilFertilizer
-         --                  >> print fertilizerWater
-         --                  >> print waterLight
-         --                  >> print lightTemperature
-         --                  >> print temperatureHumidity
-         --                  >> print humidityLocation)
+intersect' :: Range -> Range -> [Range]
+intersect' from@(Range (x,y) (x',y')) to@(Range (a,b) (a',b'))
+    | y' < a = []
+    | x' > b = []
+    | x' <= a && y' <= b = let d  = y'-a
+                               d' = a-x'
+                           in [Range (x+d',y) (a',a'+d)]
+    | x' < a && y' > b = let d = a-x'
+                             d' = y'-b
+                         in [Range (x+d,y-d') (a',b')]
+    | x' > a && y' < b = let d  = x'-a
+                             d' = b-y'
+                         in [Range (x,y) (a'+d,b'-d')]
+    | a <= x' && b <= y' = let d = b - x'
+                           in [Range (x,x+d) (b'-d,b')]
 
-partOne :: String -> ()
-partOne = __printAlmanac . parseAlmanac
+-- = let d = y' - a
+--   in [Range (x,x+d) (x',x'+d), Range (x+d,y) (a',a'+d)]
+
+-- if (y > b)
+--   then (Range (x,x+b-a) (a',b')) : mergeRange (Range (x+b-a+1,y) (y'-x+b-a+1,y') : rest1) rest2
+--   else (Range (x,y) (a',a'+y-x)) : mergeRange rest1 (Range (a+y-x+1,b) (a'+y-x+1,b'):  rest2)
+
+-- partOne :: String -> Either ParseError Almanac
+partOne input = let (Right (Almanac {..})) = parseAlmanac input
+                    merged1 = merge [Range (40,60) (30,50)] [Range (40,50) (0,10)]
+                    merged2 = merge [Range (40,60) (30,50)] [Range (30,60) (0,30)]
+                    merged3 = merge [Range (40,60) (30,50)] [Range (20,60) (0,40)]
+                    merged4 = merge [Range (40,60) (30,50)] [Range (35,45) (90,100)]
+                    merged5 = merge [Range (40,60) (30,50)] [Range (30,40) (0,10)]
+                in [merged1,merged2,merged3, merged4, merged5]
 
 partTwo :: String -> Integer
 partTwo = const 0
+
+seed_soil = [Range (0,49) (0,49),Range (50,97) (52,99),Range (98,99) (50,51)]
+soil_fert = [Range (0,14) (39,53),Range (15,51) (0,36),Range (52,53) (37,38)]
+fert_water = [Range (0,6) (42,48),Range (7,10) (57,60),Range (11,52) (0,41),Range (53,60) (49,56)]
