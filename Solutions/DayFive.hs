@@ -2,6 +2,8 @@
 
 module Solutions.DayFive (input, partOne, partTwo) where
 
+import Prelude hiding (intersect)
+
 import           Text.Parsec
 import           Text.Parsec.String (Parser)
 
@@ -12,12 +14,13 @@ import           Debug.Trace
 import           System.IO.Unsafe
 
 input :: String
-input = "test_data"
+-- input = "test_data"
+input = "inputs/5"
 
-data Hole = Hole
 hole = undefined
 
-data Range = Range (Integer, Integer) (Integer, Integer)
+data Hole = Hole
+data Range = Range (Integer, Integer) (Integer, Integer) deriving (Eq)
 
 instance Show Range where
     show (Range (destStart, destStop) (sourceStart, sourceStop))
@@ -66,7 +69,13 @@ mappingP label
                    rangeP = count 3 (numberP <* (char ' ' <|> endOfLine))
 
         build :: [Range] -> [Range]
-        build = extendFromZero . fillGaps . sortRange
+        build = extendToInfinity . extendFromZero . fillGaps . sortRange
+
+extendToInfinity :: [Range] -> [Range]
+extendToInfinity rs = let (Range (x,y) _) = last rs
+                      in rs ++ [Range (y+1,largeNumber) (y+1,largeNumber)]
+                      where
+                        largeNumber = fromIntegral (maxBound :: Int)
 
 extendFromZero :: [Range] -> [Range]
 extendFromZero (r:rs)
@@ -90,47 +99,77 @@ sortRange = sortBy (\(Range (x,y) (p,q)) (Range (x',y') (_,_)) -> compare x x')
 
 tracer x = trace (show x) x
 
-merge :: [Range] -> [Range] -> [Range]
-merge ranges1 ranges2 = concatMap (mergeIntoRanges ranges2) ranges1
-
-mergeIntoRanges :: [Range] -> Range -> [Range]
-mergeIntoRanges ranges range = concatMap (intersect' range) $ ranges
-
-intersect' :: Range -> Range -> [Range]
+intersect' :: Range -> Range -> ([Range],[Range])
 intersect' from@(Range (x,y) (x',y')) to@(Range (a,b) (a',b'))
-    | y' < a = []
-    | x' > b = []
-    | x' <= a && y' <= b = let d  = y'-a
-                               d' = a-x'
-                           in [Range (x+d',y) (a',a'+d)]
+    | y' < a = ([], [from])
+    | x' > b = ([], [from])
+    | x' == a && y' <= b = let d = y-x
+                           in ([Range (x,y) (a',a'+d)],[])
+    | x' == a && y' > b = let d = b-a
+                          in ([Range (x,x+d) (a',b')],[Range (x+d+1,y) (x'+d+1,y')])
+    | x' < a && y' < b = let d  = y'-a
+                             d' = a-x'
+                         in ([Range (x+d',y) (a',a'+d)], [Range (x,x+d'-1) (x',x'+d'-1)])
+                           -- in [Range (x+d',y) (a',a'+d)]
     | x' < a && y' > b = let d = a-x'
                              d' = y'-b
-                         in [Range (x+d,y-d') (a',b')]
+                         in ([Range (x+d,y-d') (a',b')], [Range (x,x+d-1) (x',x'+d-1), Range (y-d'+1,y) (y'-d'+1,y')])
+                         -- in [Range (x+d,y-d') (a',b')]
     | x' > a && y' < b = let d  = x'-a
                              d' = b-y'
-                         in [Range (x,y) (a'+d,b'-d')]
-    | a <= x' && b <= y' = let d = b - x'
-                           in [Range (x,x+d) (b'-d,b')]
+                         in ([Range (x,y) (a'+d,b'-d')], [])
+                         -- in [Range (x,y) (a'+d,b'-d')]
+    | x' > a && y' > b = let d = b - x'
+                             d'= y'-b
+                         in ([Range (x,x+d) (b'-d,b')], [Range (y-d'+1,y) (y'-d'+1,y')])
+                         -- in [Range (x,x+d) (b'-d,b')]
+    | a <= x' && b == y' = let d = x'-a
+                           in ([Range (x,y) (a'+d,b')],[])
+    | a > x' && b == y' = let d = a-x'
+                          in ([Range (x+d,y) (a',b')],[Range (x,x+d-1) (x',x'+d-1)])
 
--- = let d = y' - a
---   in [Range (x,x+d) (x',x'+d), Range (x+d,y) (a',a'+d)]
+intersect'' r1 r2 = trace (show r1 ++ show r2) (intersect' r1 r2)
 
--- if (y > b)
---   then (Range (x,x+b-a) (a',b')) : mergeRange (Range (x+b-a+1,y) (y'-x+b-a+1,y') : rest1) rest2
---   else (Range (x,y) (a',a'+y-x)) : mergeRange rest1 (Range (a+y-x+1,b) (a'+y-x+1,b'):  rest2)
+merge :: [Range] -> [Range] -> [Range]
+merge rs1 rs2 = build $ intersect' <$> rs1 <*> rs2
+                where
+                  build :: [([Range],[Range])] -> [Range]
+                  build list = let x = concatMap fst list
+                                   y = nub . sortRange . concatMap snd $ list
+                               in x ++ filter (not . isMapped x) y
+
+isMapped :: [Range] -> Range -> Bool
+isMapped ranges range
+    = any (rangeMapped range) ranges
+
+rangeMapped :: Range -> Range -> Bool
+rangeMapped (Range (x,y) _) (Range (a,b) _)
+    | y < a || x > b = False
+    | otherwise = True
+
+rangeifySeeds :: [Integer] -> [Range]
+rangeifySeeds (start:stop:[]) = [identityRange start stop]
+rangeifySeeds (start:stop:rest) = [identityRange start stop] ++ rangeifySeeds rest
+
+rangeifySeeds' :: [Integer] -> [Range]
+rangeifySeeds' = fmap (\x -> Range (x,x) (x,x))
+
+identityRange x y = Range (x,x+y) (x,x+y)
 
 -- partOne :: String -> Either ParseError Almanac
 partOne input = let (Right (Almanac {..})) = parseAlmanac input
-                    merged1 = merge [Range (40,60) (30,50)] [Range (40,50) (0,10)]
-                    merged2 = merge [Range (40,60) (30,50)] [Range (30,60) (0,30)]
-                    merged3 = merge [Range (40,60) (30,50)] [Range (20,60) (0,40)]
-                    merged4 = merge [Range (40,60) (30,50)] [Range (35,45) (90,100)]
-                    merged5 = merge [Range (40,60) (30,50)] [Range (30,40) (0,10)]
-                in [merged1,merged2,merged3, merged4, merged5]
+                    merged = merge seedSoil $ soilFertilizer
+                    merged' = merge merged fertilizerWater
+                    merged'' = merge merged' waterLight
+                    merged''' = merge merged'' lightTemperature
+                    merged'''' = merge merged''' temperatureHumidity
+                    merged''''' = merge merged'''' humidityLocation
+                    merged_ = merge soilFertilizer seedSoil
+                -- in seedSoil
+                in minimumBy rangeMin . merge (rangeifySeeds seeds) $ merged'''''
+                where
+                  rangeMin (Range _ (x,y)) (Range _ (a,b)) = compare x a
+                -- in sortRange merged'''''
 
 partTwo :: String -> Integer
 partTwo = const 0
-
-seed_soil = [Range (0,49) (0,49),Range (50,97) (52,99),Range (98,99) (50,51)]
-soil_fert = [Range (0,14) (39,53),Range (15,51) (0,36),Range (52,53) (37,38)]
-fert_water = [Range (0,6) (42,48),Range (7,10) (57,60),Range (11,52) (0,41),Range (53,60) (49,56)]
