@@ -29,10 +29,9 @@ parseUniverse input
       emptyV = V.all (== '.')
 
 galaxies :: Vector (Vector Char) -> [Coord]
-galaxies = toList
-         . V.concatMap (\(rowI,row) -> fmap (rowI,)
-         . V.elemIndices '#' $ row)
-         . indexed
+galaxies = toList . V.concatMap galaxiesInRow . indexed
+           where
+             galaxiesInRow (rowI, row) = fmap (rowI,) . V.elemIndices '#' $ row
 
 pairCoordinates :: [Coord] -> [(Coord,Coord)]
 pairCoordinates []     = []
