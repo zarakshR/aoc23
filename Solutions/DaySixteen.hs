@@ -25,8 +25,8 @@ pprintGrid = traverse_ (\x -> traverse (putStr . show) x >> putStrLn "")
 -------------------------------------------------------------------------------
 
 input :: String
-input = "inputs/16"
--- input = "test_data"
+-- input = "inputs/16"
+input = "test_data"
 
 type Coord = (Int, Int)
 type Grid = Array Coord Char
@@ -79,7 +79,7 @@ beam seen res pos grid = nextHop pos
                                   `S.union` (beam (S.insert coord seen) (S.insert (x,y) res) (Down (x+1,y)) grid)
                            '-' -> (beam (S.insert coord seen) (S.insert (x,y) res) (Left (x,y-1)) grid)
                            '\\' -> (beam (S.insert coord seen) (S.insert (x,y) res) (Up (x-1,y)) grid)
-                           '/' -> (beam (S.insert coord seen) (S.insert (x,y) res) (Down (x-1,y)) grid)
+                           '/' -> (beam (S.insert coord seen) (S.insert (x,y) res) (Down (x+1,y)) grid)
                      nextHop' coord@(Down (x,y))
                        = case grid ! (x,y) of
                            '.' -> (beam (S.insert coord seen) (S.insert (x,y) res) (Down (x+1,y)) grid)

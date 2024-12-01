@@ -1,22 +1,22 @@
 {-# LANGUAGE TupleSections #-}
 module Solutions.DayFifteen (input, partOne, partTwo) where
 
-import           Data.Char
+import           Data.Char          (ord)
 import           Data.List          (findIndex)
-import           Data.List.Split
+import           Data.List.Split    (splitOn)
 import           Prelude            hiding (lookup)
 
 import           Text.Parsec
 import           Text.Parsec.String (Parser)
 
-import qualified Data.Map           as M
-import           Data.Map.Ordered
+import           Data.Map           (Map, adjust, fromList, mapWithKey)
+import           Data.Map.Ordered   (OMap, alter, assocs, delete, empty)
 
 
 input :: String
-input = "test_data"
--- input = "inputs/15"
+input = "inputs/15"
 
+hash :: String -> Int
 hash = foldl hash' 0
        where
          hash' n = (`mod` 256) . (* 17) . (+ n) . ord
@@ -47,12 +47,25 @@ parseHashmap = parse hashmapP input
                  setP :: Parser Operation
                  setP = Set . read <$> (char '=' *> many1 digit)
 
-initialize :: [Step] -> M.Map Int (OMap String Int)
-initialize = foldl (flip step) . M.fromList . fmap (,empty) $ [0..255]
+initialize :: [Step] -> Map Int (OMap String Int)
+initialize = foldl (flip step) . fromList . fmap (,empty) $ [0..255]
 
-step :: Step -> M.Map Int (OMap String Int) -> M.Map Int (OMap String Int)
-step (Step hash label Pop)         = M.adjust (delete label) hash
-step (Step hash label (Set focus)) = M.adjust (alter (const $ Just focus) label) hash
+step :: Step -> Map Int (OMap String Int) -> Map Int (OMap String Int)
+step (Step hash label op)
+    | Pop <- op = adjust (delete label) hash
+    | (Set focus) <- op = adjust (set focus) hash
+      where
+        set focus = alter (const $ Just focus) label
 
--- partTwo :: String -> Int
-partTwo = fmap initialize . parseHashmap
+partTwo :: String -> Either ParseError Int
+partTwo = fmap (sum . mapWithKey reduce . initialize) . parseHashmap
+          where
+            reduce :: Int -> OMap String Int -> Int
+            reduce boxNo = sum
+                         . fmap (multiply boxNo)
+                         . zip [1..]
+                         . fmap snd
+                         . assocs
+
+            multiply :: Int -> (Int,Int) -> Int
+            multiply boxNo (lensNo, focus) = (boxNo + 1) * lensNo * focus
